@@ -1,0 +1,341 @@
+// Ließt alle sensoren zeigt aber im display nur Better Green ready an 
+
+
+/*
+  BetterGreen Growbox - AHT mit verlängerten Delays & Retries
+*/
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_MLX90614.h>
+#include <Adafruit_VEML7700.h>
+#include <Adafruit_AHTX0.h>
+#include <Servo.h>
+#include "ScioSense_ENS160.h"
+
+#define TCAADDR 0x70
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+
+Adafruit_MLX90614 mlx;
+Adafruit_VEML7700 veml;
+Adafruit_AHTX0 aht; // optional library usage (fallback)
+
+ScioSense_ENS160 ens[3] = {
+  ScioSense_ENS160(ENS160_I2CADDR_1),
+  ScioSense_ENS160(ENS160_I2CADDR_1),
+  ScioSense_ENS160(ENS160_I2CADDR_1)
+};
+
+Servo servo1, servo2, servo3;
+const int servoPins[] = {2,3,4};
+
+const int btnWuchsPin = 22;
+const int btnBluetePin = 23;
+bool modeWuchs = true;
+
+const uint8_t soilPins[12] = {A0,A1,A2,A3,A6,A7,A8,A9,A10,A11,A12,A13};
+int soilRaw[12];
+int soilPercent[12];
+
+const int dryAnalogValue = 1023;
+const int wetAnalogValue = 0;
+
+unsigned long lastRead = 0;
+const unsigned long readInterval = 3000;
+
+const uint8_t TCA_channels[3] = {0,1,2};
+
+bool mlx_present[3] = {false,false,false};
+bool veml_present[3] = {false,false,false};
+bool aht_present[3] = {false,false,false};
+bool ens_present[3] = {false,false,false};
+
+void tcaSelect(uint8_t i) {
+  if (i > 7) return;
+  Wire.beginTransmission(TCAADDR);
+  Wire.write(1 << i);
+  Wire.endTransmission();
+}
+
+bool i2cDevicePresent(uint8_t address) {
+  Wire.beginTransmission(address);
+  return (Wire.endTransmission() == 0);
+}
+
+void scanChannel(uint8_t box) {
+  tcaSelect(TCA_channels[box]);
+  delay(10);
+  Serial.print("I2C scan box "); Serial.print(box+1); Serial.println(" ...");
+  for (uint8_t addr=1; addr<127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("  Found addr 0x"); Serial.println(addr, HEX);
+    }
+  }
+}
+
+void setupBoxDevicesDetection() {
+  Serial.println("Detecting devices on TCA channels...");
+  for (uint8_t box = 0; box < 3; box++) {
+    scanChannel(box);
+    tcaSelect(TCA_channels[box]); delay(10);
+    mlx_present[box] = i2cDevicePresent(0x5A);
+    veml_present[box] = i2cDevicePresent(0x10);
+    aht_present[box] = i2cDevicePresent(0x38) || i2cDevicePresent(0x39);
+    ens_present[box] = i2cDevicePresent(ENS160_I2CADDR_1);
+    Serial.print("Box "); Serial.print(box+1);
+    Serial.print(": MLX "); Serial.print(mlx_present[box] ? "OK" : "N/A");
+    Serial.print(", VEML "); Serial.print(veml_present[box] ? "OK" : "N/A");
+    Serial.print(", AHT "); Serial.print(aht_present[box] ? "OK" : "N/A");
+    Serial.print(", ENS "); Serial.println(ens_present[box] ? "OK" : "N/A");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();
+  lcd.init();
+  lcd.backlight();
+
+  pinMode(btnWuchsPin, INPUT_PULLUP);
+  pinMode(btnBluetePin, INPUT_PULLUP);
+
+  servo1.attach(servoPins[0]);
+  servo2.attach(servoPins[1]);
+  servo3.attach(servoPins[2]);
+  servo1.write(90); servo2.write(90); servo3.write(90);
+
+  Serial.println("BetterGreen starting...");
+  setupBoxDevicesDetection();
+
+  for (uint8_t box=0; box<3; box++) {
+    tcaSelect(TCA_channels[box]);
+    delay(10);
+
+    if (veml_present[box]) {
+      if (!veml.begin()) { veml_present[box] = false; Serial.print("VEML init failed on box "); Serial.println(box+1); }
+      else Serial.print("VEML OK on box "); Serial.println(box+1);
+    }
+
+    if (aht_present[box]) {
+      // extended library init with retries & backoff
+      bool ok = false;
+      for (uint8_t r = 0; r < 8; r++) {        // bis zu 8 Versuche
+        tcaSelect(TCA_channels[box]);
+        delay(50);
+        Serial.print("AHT lib begin attempt "); Serial.print(r+1); Serial.print(" on box "); Serial.println(box+1);
+        if (aht.begin() == true) { ok = true; Serial.println("AHT lib begin => true"); break; }
+        delay(200 + r * 50);                    // steigender Backoff 200..550 ms
+      }
+      if (!ok) { Serial.print("AHT library init failed on box "); Serial.println(box+1); }
+      else Serial.print("AHT library init OK on box "); Serial.println(box+1);
+    }
+
+    if (mlx_present[box]) {
+      if (!mlx.begin()) { mlx_present[box] = false; Serial.print("MLX init failed on box "); Serial.println(box+1); }
+      else Serial.print("MLX OK on box "); Serial.println(box+1);
+    }
+
+    if (ens_present[box]) {
+      bool ok = ens[box].begin(false);
+      if (!ok) { ens_present[box] = false; Serial.print("ENS begin failed on box "); Serial.println(box+1); }
+      else Serial.print("ENS OK on box "); Serial.println(box+1);
+    }
+  }
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("BetterGreen Ready");
+  delay(600);
+}
+
+// robust read: mehrere Roh-I2C Versuche, danach optional library getEvent() als Fallback
+bool readAHT_withRetries(uint8_t box, float &t, float &h) {
+  const uint8_t AHT = 0x38;
+  t = NAN; h = NAN;
+
+  // ensure correct TCA channel selected
+  tcaSelect(TCA_channels[box]);
+  delay(30);
+
+  // mehrere Mess‑Versuche (Roh I2C)
+  for (uint8_t attempt = 0; attempt < 6; attempt++) {
+    tcaSelect(TCA_channels[box]);
+    delay(20);
+
+    // soft init before measurement (some firmwares require)
+    Wire.beginTransmission(AHT);
+    Wire.write(0xE1); Wire.write(0x08); Wire.write(0x00);
+    Wire.endTransmission();
+    delay(80 + attempt * 20); // zunehmender Wartezeit-Backoff
+
+    // send measure
+    Wire.beginTransmission(AHT);
+    Wire.write(0xAC); Wire.write(0x33); Wire.write(0x00);
+    if (Wire.endTransmission() != 0) {
+      // NACK, warte und retry
+      delay(120 + attempt * 60);
+      continue;
+    }
+    // Messzeit (100..220ms)
+    delay(120 + attempt * 30);
+
+    Wire.requestFrom(AHT, (uint8_t)6);
+    uint8_t buf[6]; uint8_t i = 0;
+    unsigned long start = millis();
+    while (i < 6 && (millis() - start) < 350) {
+      if (Wire.available()) buf[i++] = Wire.read();
+    }
+    if (i < 6) {
+      delay(140 + attempt * 50);
+      continue;
+    }
+
+    uint32_t hum_raw = ((uint32_t)buf[1] << 12) | ((uint32_t)buf[2] << 4) | ((buf[3] >> 4) & 0x0F);
+    uint32_t temp_raw = (((uint32_t)(buf[3] & 0x0F) << 16) | ((uint32_t)buf[4] << 8) | buf[5]);
+    h = (hum_raw * 100.0) / 1048576.0;
+    t = ((temp_raw * 200.0) / 1048576.0) - 50.0;
+    return true;
+  }
+
+  // Fallback: versuchen mit Adafruit library getEvent() mehrere Male
+  if (aht_present[box]) {
+    for (uint8_t attempt = 0; attempt < 8; attempt++) {
+      tcaSelect(TCA_channels[box]);
+      delay(40 + attempt * 10);
+      sensors_event_t humidity, temp;
+      int res = aht.getEvent(&humidity, &temp);
+      if (res == 0) {
+        h = humidity.relative_humidity;
+        t = temp.temperature;
+        return true;
+      }
+      delay(150 + attempt * 50);
+    }
+  }
+
+  return false;
+}
+
+float readMLX(uint8_t box) {
+  tcaSelect(TCA_channels[box]); delay(10);
+  if (!mlx_present[box]) return NAN;
+  float val = mlx.readObjectTempC();
+  if (isnan(val)) Serial.print("MLX NaN on box "), Serial.println(box+1);
+  return val;
+}
+
+float readVEMLlux(uint8_t box) {
+  tcaSelect(TCA_channels[box]); delay(10);
+  if (!veml_present[box]) return NAN;
+  float lx = veml.readLux();
+  if (isnan(lx)) Serial.print("VEML NaN on box "), Serial.println(box+1);
+  return lx;
+}
+
+bool readENS(uint8_t box, uint8_t &aqi, uint16_t &tvoc, uint16_t &eco2) {
+  if (!ens_present[box]) return false;
+  tcaSelect(TCA_channels[box]); delay(10);
+  float atemp, ahum;
+  if (readAHT_withRetries(box, atemp, ahum)) ens[box].set_envdata(atemp, ahum);
+  if (!ens[box].measure(true)) { Serial.print("ENS measure failed on box "); Serial.println(box+1); return false; }
+  aqi = ens[box].getAQI();
+  tvoc = ens[box].getTVOC();
+  eco2 = ens[box].geteCO2();
+  return true;
+}
+
+int soilToPercent(int raw) {
+  int r = raw;
+  if (r < wetAnalogValue) r = wetAnalogValue;
+  if (r > dryAnalogValue) r = dryAnalogValue;
+  int p = map(r, dryAnalogValue, wetAnalogValue, 0, 100);
+  if (p<0) p=0; if (p>100) p=100;
+  return p;
+}
+
+void readSoils() {
+  for (uint8_t i=0;i<12;i++) { soilRaw[i]=analogRead(soilPins[i]); soilPercent[i]=soilToPercent(soilRaw[i]); }
+}
+
+void logAll(float boxTemps[3], float boxATemp[3], float boxAHum[3], float boxLux[3],
+            uint8_t boxAQI[3], uint16_t boxTVOC[3], uint16_t boxECO2[3]) {
+  Serial.println(F("===== BetterGreen Log ====="));
+  Serial.print(F("Timestamp ms: ")); Serial.println(millis());
+  for (uint8_t box=0; box<3; box++) {
+    Serial.print(F("Box ")); Serial.print(box+1); Serial.print(F(" | MLX: "));
+    if (!isnan(boxTemps[box])) Serial.print(boxTemps[box],2); else Serial.print("N/A");
+    Serial.print(F(" C | AHT T: "));
+    if (!isnan(boxATemp[box])) Serial.print(boxATemp[box],2); else Serial.print("N/A");
+    Serial.print(F(" C | RH: "));
+    if (!isnan(boxAHum[box])) Serial.print(boxAHum[box],1); else Serial.print("N/A");
+    Serial.print(F(" % | Lux: "));
+    if (!isnan(boxLux[box])) Serial.print(boxLux[box],1); else Serial.print("N/A");
+    Serial.print(F(" | ENS_AQI: "));
+    if (boxAQI[box] != 0xFF) Serial.print(boxAQI[box]); else Serial.print("N/A");
+    Serial.print(F(" | TVOC: "));
+    if (boxTVOC[box] != 0xFFFF) Serial.print(boxTVOC[box]); else Serial.print("N/A");
+    Serial.print(F(" | eCO2: "));
+    if (boxECO2[box] != 0xFFFF) Serial.print(boxECO2[box]); else Serial.print("N/A");
+    Serial.println();
+  }
+  Serial.println(F("Soils:"));
+  for (uint8_t i=0;i<12;i++) {
+    Serial.print("S"); Serial.print(i+1); Serial.print(": ");
+    Serial.print(soilRaw[i]); Serial.print(" -> ");
+    Serial.print(soilPercent[i]); Serial.println("%");
+  }
+  Serial.print(F("Mode: ")); Serial.println(modeWuchs ? "Wuchs" : "Bluete");
+  Serial.println(F("===========================\n"));
+}
+
+void handleButtons() {
+  static bool lastW = HIGH;
+  static bool lastB = HIGH;
+  bool curW = digitalRead(btnWuchsPin);
+  bool curB = digitalRead(btnBluetePin);
+  if (lastW == HIGH && curW == LOW) { modeWuchs = true; Serial.println("Mode set: Wuchs"); }
+  if (lastB == HIGH && curB == LOW) { modeWuchs = false; Serial.println("Mode set: Bluete"); }
+  lastW = curW; lastB = curB;
+}
+
+void loop() {
+  handleButtons();
+  if (millis() - lastRead < readInterval) return;
+  lastRead = millis();
+
+  float boxTemps[3], boxATemp[3], boxAHum[3], boxLux[3];
+  uint8_t boxAQI[3]; uint16_t boxTVOC[3], boxECO2[3];
+
+  for (uint8_t box=0; box<3; box++) {
+    boxTemps[box]=NAN; boxATemp[box]=NAN; boxAHum[box]=NAN; boxLux[box]=NAN;
+    boxAQI[box]=0xFF; boxTVOC[box]=0xFFFF; boxECO2[box]=0xFFFF;
+
+    tcaSelect(TCA_channels[box]); delay(10);
+
+    float tmlx = readMLX(box);
+    if (!isnan(tmlx)) boxTemps[box]=tmlx;
+
+    float at, ah;
+    if (aht_present[box] && readAHT_withRetries(box, at, ah)) { boxATemp[box]=at; boxAHum[box]=ah; }
+
+    float lx = readVEMLlux(box);
+    if (!isnan(lx)) boxLux[box]=lx;
+
+    if (ens_present[box]) {
+      uint8_t aqi; uint16_t tvoc, eco2;
+      if (readENS(box, aqi, tvoc, eco2)) { boxAQI[box]=aqi; boxTVOC[box]=tvoc; boxECO2[box]=eco2; }
+    }
+  }
+
+  readSoils();
+  logAll(boxTemps, boxATemp, boxAHum, boxLux, boxAQI, boxTVOC, boxECO2);
+
+  int avgSoil = 0;
+  for (uint8_t i=0;i<12;i++) avgSoil += soilPercent[i];
+  avgSoil = avgSoil / 12;
+  int servoPos = map(avgSoil, 0, 100, 180, 0);
+  servo1.write(servoPos);
+  servo2.write(constrain(servoPos+10,0,180));
+  servo3.write(constrain(servoPos-10,0,180));
+}
