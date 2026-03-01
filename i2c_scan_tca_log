@@ -1,0 +1,28 @@
+18:33:15.457 ->   Found addr 0x70
+18:33:15.490 -> Box 2: MLX OK, VEML OK, AHT OK, ENS OK
+18:33:15.490 -> I2C scan box 3 ...
+18:33:15.490 ->   Found addr 0x10
+18:33:15.490 ->   Found addr 0x27
+18:33:15.490 ->   Found addr 0x38
+18:33:15.490 ->   Found addr 0x53
+18:33:15.490 ->   Found addr 0x5A
+18:33:15.535 ->   Found addr 0x70
+18:33:15.535 -> Box 3: MLX OK, VEML OK, AHT OK, ENS OK
+18:33:15.646 -> VEML OK on box 1
+18:33:15.724 -> AHT lib begin attempt 1 on box 1
+18:33:15.724 -> AHT lib begin => true
+18:33:15.724 -> AHT library init OK on box 1
+18:33:15.770 -> MLX OK on box 1
+18:33:15.863 -> ENS OK on box 1
+18:33:16.002 -> VEML OK on box 2
+18:33:16.048 -> AHT lib begin attempt 1 on box 2
+18:33:16.048 -> AHT lib begin => true
+18:33:16.048 -> AHT library init OK on box 2
+18:33:16.080 -> MLX OK on box 2
+18:33:16.192 -> ENS OK on box 2
+18:33:16.317 -> VEML OK on box 3
+18:33:16.363 -> AHT lib begin attempt 1 on box 3
+18:33:16.396 -> AHT lib begin => true
+18:33:16.396 -> AHT library init OK on box 3
+18:33:16.396 -> MLX OK on box 3
+18:33:16.478 -> ENS OK on box 3
