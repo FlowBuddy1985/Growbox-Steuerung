@@ -1,0 +1,165 @@
+erstelle den code sollten sensoren ausfallen trotzdem starten
+alle werte und vorgängebene im seriellen monitor und auf dem lcd ausgeben
+BetterGreen Growbox steuerung
+Libarys:
+ #include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_MLX90614.h>
+#include <Adafruit_VEML7700.h>
+#include <Adafruit_AHTX0.h>
+#include "TCA9548.h"       TCAADDR 0x70
+oSense_ENS160.h"  0x53
+include <Servo.h>
+#include <Servo.h>
+
+Hardware:
+
+1* Adruino Mega 2560
+1* Sensor shield
+1* Lcd 2004 I2C 0x27
+12* Soil measure  Pin A0-A3 A6-A13
+Bodenfeuchtigkeitssensoren sollen Ob für oben und Un für unten 
+1* TCA9548A I2C IIC Multiplexer 0x70
+TCA9548A I2C sd0 sc0 Box1
+TCA9548A I2C sd1 sc1 box 2
+TCA9548A I2C sd2 sc2 box 3
+2* Tasten pin: 22,23; pullup
+2 menü auswahlpunkte blüte und wuchs 
+Vpd werte für cannabis blüte und wuchs  
+3* Servo motoren pin: 2,3,4
+
+
+
+
+int sensorPin1 = A0;
+int sensorValue;
+int dryAnalogValue = 1023;
+int wetAnalogValue = 0;
+int DryValuePercent = 0;
+int WetValuepercent = 100;
+int sensorPin2 = A1;
+int sensorValue2;
+int dryAnalogValue2 = 1023;
+int wetAnalogValue2 = 0;
+int DryValuePercent2 = 0;
+int WetValuepercent2 = 100;
+int sensorPi3 = A2;
+int sensorValue3;
+int dryAnalogValue3 = 1023;
+int wetAnalogValue3 = 0;
+int DryValuePercent3 = 0;
+int WetValuepercent3 = 100;
+int sensorPin4 = A3;
+int sensorValue4;
+int dryAnalogValue4 = 1023;
+int wetAnalogValue4 = 0;
+int DryValuePercent4 = 0;
+int WetValuepercent4 = 100;
+int sensorPin5 = A6;
+int sensorValue5;
+int dryAnalogValue5 = 1023;
+int wetAnalogValue5 = 0;
+int DryValuePercent5 = 0;
+int WetValuepercent5 = 100;
+int sensorPin6 = A7;
+int sensorValue6;
+int dryAnalogValue6 = 1023;
+int wetAnalogValue6 = 0;
+int DryValuePercent6 = 0;
+int WetValuepercent6 = 100;
+int sensorPin7 = A8;
+int sensorValue7;
+int dryAnalogValue7 = 1023;
+int wetAnalogValue7 = 0;
+int DryValuePercent7 = 0;
+int WetValuepercent7 = 100;
+int sensorPin8 = A9;
+int sensorValue8;
+int dryAnalogValue8 = 1023;
+int wetAnalogValue8 = 0;
+int DryValuePercent8 = 0;
+int WetValuepercent8 = 100;
+int sensorPin9 = A10;
+int sensorValue9;
+int dryAnalogValue9 = 1023;
+int wetAnalogValue9 = 0;
+int DryValuePercent9 = 0;
+int WetValuepercent9 = 100;
+int sensorPin10 = A11;
+int sensorValue10;
+int dryAnalogValue10 = 1023;
+int wetAnalogValue10 = 0;
+int DryValuePercent10 = 0;
+int WetValuepercent10 = 100;
+int sensorPin11 = A12;
+int sensorValue11;
+int dryAnalogValue11 = 1023;
+int wetAnalogValue11 = 0;
+int DryValuePercent11 = 0;
+int WetValuepercent11 = 100;
+int sensorPin12 = A13;
+int sensorValue12;
+int dryAnalogValue12 = 1023;
+int wetAnalogValue12 = 0;
+int DryValuePercent12 = 0;
+int WetValuepercent12 = 100;
+
+
+
+
+
+Box1
+1stk 1. MLX90614 GY906
+1stk 1. ENS160 0x53  ENS160
+1stk  1. AHT21  
+1stk 1. VEML7700
+Soil 1-4 Bodenfeuchtigkeitssensoren 
+
+Box2
+TCA9548A I2C sd1 sc1
+
+1stk 2. MLX90614 GY906
+
+1stk 2. ENS160 ENS160
+1stk  2. AHT21  
+1stk 2. VEML7700
+ Soil 4-8  Bodenfeuchtigkeitssensoren
+
+Box3
+TCA9548A I2C sd1 sc1
+
+1stk 3. MLX90614 GY906
+
+1stk 3. ENS160 ENS160
+1stk  3. AHT21  
+1stk 3. VEML7700
+ Soil 9-13  Bodenfeuchtigkeitssensoren
+
+
+
+
+
+Display Anzeigen :
+Seite 1 
+Box 1
+1Luft: Feuchtigkeit  Temperatur
+1Co2
+1Lux in ppfd
+
+Seite 2. Soil 1-4
+Seite 3. 1Vpd
+Seite 4. Box 2 
+2Luft: Feuchtigkeit  Temperatur
+Co2
+2Lux in ppfd
+Seite 5. Soil 4-8
+Seite 6. 2Vpd
+Seite 7. Box 3 
+3Luft: Feuchtigkeit  Temperatur
+Co2
+3Lux in ppfd
+Seite 8. Soil 9-13
+Seite 9. 3Vpd
+
+
+
