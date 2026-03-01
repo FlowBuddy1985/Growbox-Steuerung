@@ -1,0 +1,129 @@
+//Weiß nicht welcher sesnor ausgelesen wird ....
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <BH1750.h>
+#include <Adafruit_MLX90614.h>
+#include <ScioSense_ENS16x.h> // ENS160 Bibliothek
+#include <ScioSense_ENS21x.h> // ENS210 Bibliothek
+
+// Initialisieren der Bibliotheken
+LiquidCrystal_I2C lcd(0x27, 20, 4); // LCD-Adresse und Größe
+BH1750 lightSensor; // BH1750 Sensor
+Adafruit_MLX90614 mlx = Adafruit_MLX90614(); // MLX90614 Sensor
+ENS160 ens160; // ENS160 Sensor
+ENS210 ens210; // ENS210 Sensor
+
+// Pins für Bodensensoren
+const int soilPins[] = {A0, A1, A2, A3, A6, A7, A8, A9, A10, A11, A12, A13}; // Alle 12 Pins
+
+void setup() {
+    lcd.begin(20, 4, LCD_5x8DOTS); // LCD initialisieren
+    Serial.begin(9600); // Seriellen Monitor initialisieren
+    Wire.begin();
+    
+    lightSensor.begin(); // BH1750 initialisieren
+    mlx.begin(); // MLX90614 initialisieren
+
+    // ENS160 und ENS210 initialisieren (mit Wire und Adresse)
+    ens160.begin(&Wire, 0x53); // Beispieladresse 0x53
+    ens210.begin(&Wire, 0x53); // Beispieladresse 0x53
+
+    lcd.backlight();
+}
+
+void loop() {
+    displayBox(1, 0); // Box 1 (Soil 1-4)
+    delay(3000); // 3 Sekunden warten
+    displayBox(2, 4); // Box 2 (Soil 5-8)
+    delay(3000); // 3 Sekunden warten
+    displayBox(3, 8); // Box 3 (Soil 9-12)
+    delay(3000); // 3 Sekunden warten
+}
+
+void displayBox(int boxNumber, int startIndex) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Box ");
+    lcd.print(boxNumber);
+
+    // Bodensensoren anzeigen
+    for (int i = 0; i < 4; i++) {
+        int soilValue = analogRead(soilPins[startIndex + i]);
+        lcd.setCursor(0, i + 1);
+        
+        // Umbenennung der Sensoren
+        if (i < 2) { // Soil 1-2 und 5-6 oben
+            lcd.print("Soil Oben ");
+        } else { // Soil 3-4 und 7-8 unten
+            lcd.print("Soil Unten ");
+        }
+        lcd.print(startIndex + i + 1); // Zeige Sensornummer an
+        
+        // Daten an den seriellen Monitor senden
+        Serial.print("Soil ");
+        Serial.print(startIndex + i + 1);
+        Serial.print(": ");
+        Serial.println(soilValue);
+    }
+
+    // 3 Sekunden warten, um die Bodensensoren anzuzeigen
+    delay(3000);
+
+    // Jetzt BH1750 und ENS160/ENS210 anzeigen
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Light & Temp");
+
+    // BH1750 Wert anzeigen
+    float lux = lightSensor.readLightLevel();
+    lcd.setCursor(0, 1);
+    lcd.print("Light: ");
+    lcd.print(lux);
+    lcd.print(" lx");
+
+    // Daten an den seriellen Monitor senden
+    Serial.print("Light: ");
+    Serial.print(lux);
+    Serial.println(" lx");
+
+    // MLX90614 Wert anzeigen
+    float temp = mlx.readObjectTempC();
+    lcd.setCursor(0, 2);
+    lcd.print("Temp: ");
+    lcd.print(temp);
+    lcd.print(" C");
+
+    // Daten an den seriellen Monitor senden
+    Serial.print("Temp: ");
+    Serial.print(temp);
+    Serial.println(" C");
+
+    // ENS160 Werte anzeigen
+    float TVOC = ens160.getTvoc(); // Beispiel für TVOC-Wert
+    lcd.setCursor(0, 3);
+    lcd.print("TVOC: ");
+    lcd.print(TVOC);
+    lcd.print(" ppb"); // ppb für TVOC
+
+    // Daten an den seriellen Monitor senden
+    Serial.print("TVOC: ");
+    Serial.println(TVOC);
+
+    // ENS210 Werte anzeigen
+    float temperature = ens210.getTempCelsius(); // Beispiel für Temperaturwert
+    float humidity = ens210.getHumidityPercent(); // Korrekte Methode für die Luftfeuchtigkeit
+    lcd.setCursor(0, 4);
+    lcd.print("Temp: ");
+    lcd.print(temperature);
+    lcd.print(" C");
+
+    // Daten an den seriellen Monitor senden
+    Serial.print("Temp: ");
+    Serial.println(temperature);
+    Serial.print("Humidity: ");
+    Serial.println(humidity); // Füge auch Feuchtigkeit hinzu
+
+    // 3 Sekunden warten, um die Licht-, Temperatur- und ENS-Werte anzuzeigen
+    delay(3000);
+}
